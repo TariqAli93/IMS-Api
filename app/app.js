@@ -14,6 +14,7 @@ import serveStatic from "../src/plugins/static.js";
 import bcrypt from "../src/plugins/bcrypt.js";
 import configLogger from "../src/plugins/config-logger.js";
 import rbacPlugin from "../src/rbac/index.js";
+import adminRbacRoutes from "../src/rbac/admin-rbac.js";
 
 import { autoloadRoutes } from "../src/utils/autoload.js";
 
@@ -21,9 +22,7 @@ const app = Fastify({
   logger: {
     transport: {
       target: "pino-pretty",
-      options: {
-        colorize: true
-      }
+      options: { colorize: true }
     },
     level: "info"
   }
@@ -51,6 +50,8 @@ await app.register(rbacPlugin, {
   superRoles: ["ADMIN"],
   getUserRoles: (req) => (Array.isArray(req.user?.roles) ? req.user.roles : [])
 });
+
+await app.register(adminRbacRoutes);
 
 // Auto routes
 const __filename = fileURLToPath(import.meta.url);

@@ -53,6 +53,8 @@ model Permission {
   resource String
   action   String
   roles    RolePermission[]
+
+  @@unique([resource, action], name: "resource_action")
 }
 
 model RolePermission {

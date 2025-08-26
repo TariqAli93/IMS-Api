@@ -2,9 +2,7 @@ import "dotenv/config";
 import { PrismaClient, RoleName, InstallmentStatus, ContractStatus, DocType } from "@prisma/client";
 import { config } from "dotenv";
 
-const prisma = new PrismaClient({
-  log: ["query", "info", "warn", "error"]
-});
+const prisma = new PrismaClient();
 const SALT_ROUNDS = 10;
 
 config({
