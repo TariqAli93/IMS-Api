@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleName {
+  ADMIN
+  MANAGER
+  STAFF
+  OWNER
+}
+
+enum ContractStatus {
+  ACTIVE
+  CLOSED
+  DEFAULTED
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  LATE
+}
+
+enum DocType {
+  ID
+  CONTRACT
+  RECEIPT
+  OTHER
+}
+
+model User {
+  id        Int        @id @default(autoincrement())
+  username  String     @unique
+  password  String
+  createdAt DateTime   @default(now())
+  roles     UserRole[]
+}
+
+model Role {
+  id    Int              @id @default(autoincrement())
+  name  RoleName         @unique
+  users UserRole[]
+  perms RolePermission[]
+}
+
+model Permission {
+  id       Int              @id @default(autoincrement())
+  resource String
+  action   String
+  roles    RolePermission[]
+}
+
+model RolePermission {
+  roleId Int
+  permId Int
+  role   Role       @relation(fields: [roleId], references: [id])
+  perm   Permission @relation(fields: [permId], references: [id])
+
+  @@id([roleId, permId])
+}
+
+model UserRole {
+  userId Int
+  roleId Int
+  user   User @relation(fields: [userId], references: [id])
+  role   Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+model Customer {
+  id        Int        @id @default(autoincrement())
+  name      String
+  phone     String?
+  createdAt DateTime   @default(now())
+  documents Document[]
+  contracts Contract[]
+}
+
+model Product {
+  id             Int            @id @default(autoincrement())
+  name           String
+  priceCents     Int
+  stock          Int            @default(0)
+  stockThreshold Int            @default(5)
+  createdAt      DateTime       @default(now())
+  items          ContractItem[]
+}
+
+model Contract {
+  id           Int            @id @default(autoincrement())
+  customerId   Int
+  customer     Customer       @relation(fields: [customerId], references: [id])
+  status       ContractStatus @default(ACTIVE)
+  totalCents   Int
+  months       Int
+  startDate    DateTime
+  createdAt    DateTime       @default(now())
+  items        ContractItem[]
+  installments Installment[]
+}
+
+model ContractItem {
+  id         Int      @id @default(autoincrement())
+  contractId Int
+  productId  Int
+  qty        Int
+  unitCents  Int
+  contract   Contract @relation(fields: [contractId], references: [id])
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+model Installment {
+  id          Int               @id @default(autoincrement())
+  contractId  Int
+  contract    Contract          @relation(fields: [contractId], references: [id])
+  seq         Int
+  dueDate     DateTime
+  amountCents Int
+  status      InstallmentStatus @default(PENDING)
+  paidCents   Int               @default(0)
+  payments    Payment[]
+
+  @@index([dueDate, status])
+}
+
+model Payment {
+  id            Int         @id @default(autoincrement())
+  installmentId Int
+  installment   Installment @relation(fields: [installmentId], references: [id])
+  amountCents   Int
+  paidAt        DateTime    @default(now())
+
+  @@index([paidAt])
+}
+
+model Document {
+  id         Int      @id @default(autoincrement())
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  type       DocType
+  path       String
+  fileName   String
+  mimeType   String
+  size       Int
+  checksum   String?
+  uploadedAt DateTime @default(now())
+}
+
+model NotificationLog {
+  id        Int      @id @default(autoincrement())
+  type      String
+  payload   String
+  createdAt DateTime @default(now())
+}
