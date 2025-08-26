@@ -13,9 +13,9 @@ import multipart from "../src/plugins/multipart.js";
 import serveStatic from "../src/plugins/static.js";
 import bcrypt from "../src/plugins/bcrypt.js";
 import configLogger from "../src/plugins/config-logger.js";
+import rbacPlugin from "../src/rbac/index.js";
 
 import { autoloadRoutes } from "../src/utils/autoload.js";
-import { buildAccessControlFromDB } from "../src/rbac/index.js";
 
 const app = Fastify({
   logger: {
@@ -47,14 +47,14 @@ await app.register(bcrypt);
 await app.register(configLogger);
 await app.register(import("../src/plugins/scheduler.js"), { enabled: true });
 
-// RBAC grants snapshot
-app.decorate("ac", await buildAccessControlFromDB(app.prisma));
+await app.register(rbacPlugin, {
+  superRoles: ["ADMIN"],
+  getUserRoles: (req) => (Array.isArray(req.user?.roles) ? req.user.roles : [])
+});
 
 // Auto routes
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 await autoloadRoutes(app, join(__dirname, "../src/modules"));
-
-process.env.NODE_ENV = "development";
 
 export default app;

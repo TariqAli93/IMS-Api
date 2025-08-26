@@ -1,3 +1,5 @@
+import { includes } from "zod/v4";
+
 export default async function routes(app) {
   const schema = {
     tags: ["auth"]
@@ -20,14 +22,29 @@ export default async function routes(app) {
     async (req, reply) => {
       // Validate request body
       const { username, password } = req.body;
+
       if (!username || !password) {
         return reply.status(400).send({ message: "Missing username or password" });
       }
 
-      const user = await app.prisma.user.findUnique({ where: { username } });
+      const user = await app.prisma.user.findUnique({
+        where: { username },
+        include: {
+          roles: {
+            include: {
+              role: true
+            }
+          }
+        }
+      });
       const matchPassword = await app.bcrypt.compare(req.body.password, user.password);
       if (user && matchPassword) {
-        const token = app.jwt.sign({ userId: user.id });
+        const userRoles = user?.roles?.map((ur) => ur.role.name) || [];
+        const token = app.jwt.sign({
+          userId: user.id,
+          username: user.username,
+          roles: userRoles
+        });
         reply.status(200).send({ token });
       } else {
         reply.status(401).send({ message: "Invalid credentials" });

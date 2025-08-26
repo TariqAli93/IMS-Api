@@ -1,15 +1,8 @@
+import "dotenv/config";
 import fp from "fastify-plugin";
-import { config } from "dotenv";
-import path from "path";
 import { object, string, number } from "zod";
 import winston from "winston";
 import { format } from "date-fns-tz";
-
-// init dotenv
-process.env.NODE_ENV = process.env.NODE_ENV || "development";
-
-const pathName = path.resolve(process.cwd(), `.env.${process.env.NODE_ENV}`);
-config({ path: pathName });
 
 const ConfigSchema = object({
   NODE_ENV: string().nonempty(),
