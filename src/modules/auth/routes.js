@@ -1,9 +1,19 @@
-import { includes } from "zod/v4";
+// Auth routes
 
 export default async function routes(app) {
   const schema = {
     tags: ["auth"]
   };
+
+  function parseDuration(str, defMs) {
+    if (!str) return defMs;
+    const m = /^([0-9]+)\s*(ms|s|m|h|d)?$/i.exec(str.trim());
+    if (!m) return defMs;
+    const n = Number(m[1]);
+    const unit = (m[2] || 's').toLowerCase();
+    const mult = unit === 'ms' ? 1 : unit === 's' ? 1000 : unit === 'm' ? 60000 : unit === 'h' ? 3600000 : 86400000;
+    return n * mult;
+  }
   app.post(
     "/login",
     {
@@ -24,7 +34,7 @@ export default async function routes(app) {
       const { username, password } = req.body;
 
       if (!username || !password) {
-        return reply.status(400).send({ message: "Missing username or password" });
+        return reply.error(400, "Missing username or password");
       }
 
       const user = await app.prisma.user.findUnique({
@@ -37,17 +47,29 @@ export default async function routes(app) {
           }
         }
       });
-      const matchPassword = await app.bcrypt.compare(req.body.password, user.password);
-      if (user && matchPassword) {
+      // Guard against non-existent user before bcrypt compare
+      if (!user) {
+        return reply.error(401, "Invalid credentials");
+      }
+
+      const matchPassword = await app.bcrypt.compare(password, user.password);
+      if (matchPassword) {
         const userRoles = user?.roles?.map((ur) => ur.role.name) || [];
-        const token = app.jwt.sign({
+        const accessToken = app.jwt.sign({
           userId: user.id,
           username: user.username,
           roles: userRoles
         });
-        reply.status(200).send({ token });
+        // Create rotating refresh token
+        const ttl = parseDuration(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN, 7 * 24 * 3600 * 1000);
+        const expiresAt = new Date(Date.now() + ttl);
+        const { randomBytes, createHash } = await import('node:crypto');
+        const raw = randomBytes(32).toString('hex');
+        const tokenHash = createHash('sha256').update(raw).digest('hex');
+        await app.prisma.refreshToken.create({ data: { userId: user.id, tokenHash, expiresAt } });
+        reply.status(200).send({ accessToken, refreshToken: raw });
       } else {
-        reply.status(401).send({ message: "Invalid credentials" });
+        return reply.error(401, "Invalid credentials");
       }
     }
   );
@@ -73,8 +95,14 @@ export default async function routes(app) {
       const user = await app.prisma.user.create({
         data: { username, password: hashedPassword }
       });
-      const token = app.jwt.sign({ userId: user.id });
-      return { token };
+      const accessToken = app.jwt.sign({ userId: user.id, username });
+      const ttl = parseDuration(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN, 7 * 24 * 3600 * 1000);
+      const expiresAt = new Date(Date.now() + ttl);
+      const { randomBytes, createHash } = await import('node:crypto');
+      const raw = randomBytes(32).toString('hex');
+      const tokenHash = createHash('sha256').update(raw).digest('hex');
+      await app.prisma.refreshToken.create({ data: { userId: user.id, tokenHash, expiresAt } });
+      return { accessToken, refreshToken: raw };
     }
   );
 
@@ -96,7 +124,7 @@ export default async function routes(app) {
       const { email } = req.body;
       const user = await app.prisma.user.findUnique({ where: { email } });
       if (!user) {
-        return reply.status(404).send({ message: "User not found" });
+        return reply.error(404, "User not found");
       }
       // TODO: Send password reset email
       return { message: "Password reset email sent" };
@@ -122,7 +150,7 @@ export default async function routes(app) {
       const { username, newPassword } = req.body;
       const user = await app.prisma.user.findUnique({ where: { username } });
       if (!user) {
-        return reply.status(404).send({ message: "User not found" });
+        return reply.error(404, "User not found");
       }
       const hashedPassword = await app.bcrypt.hash(newPassword);
       await app.prisma.user.update({
@@ -141,8 +169,15 @@ export default async function routes(app) {
       }
     },
     async (req, reply) => {
-      // TODO: Invalidate JWT token
-      return { message: "Logged out successfully" };
+      const { refreshToken } = req.body || {};
+      if (!refreshToken) return reply.status(200).send({ ok: true });
+      const { createHash } = await import('node:crypto');
+      const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
+      await app.prisma.refreshToken.updateMany({
+        where: { tokenHash, revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+      return { ok: true };
     }
   );
 
@@ -154,21 +189,50 @@ export default async function routes(app) {
         body: {
           type: "object",
           properties: {
-            token: { type: "string" }
+            refreshToken: { type: "string" }
           },
-          required: ["token"]
+          required: ["refreshToken"]
         }
       }
     },
     async (req, reply) => {
-      const { token } = req.body;
-      try {
-        const decoded = app.jwt.verify(token);
-        const newToken = app.jwt.sign({ userId: decoded.userId });
-        return { token: newToken };
-      } catch (error) {
-        return reply.status(401).send({ message: "Invalid token" });
+      const { refreshToken } = req.body;
+      const { createHash } = await import('node:crypto');
+      const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
+
+      const existing = await app.prisma.refreshToken.findFirst({ where: { tokenHash }, include: { user: { include: { roles: { include: { role: true } } } } } });
+      if (!existing) return reply.error(401, "Invalid token");
+
+      // Reuse detection: already revoked
+      if (existing.revokedAt) {
+        // Revoke all active for this user (defensive)
+        await app.prisma.refreshToken.updateMany({ where: { userId: existing.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+        return reply.error(401, "Token reused");
       }
+
+      if (existing.expiresAt <= new Date()) {
+        // Expired
+        await app.prisma.refreshToken.update({ where: { id: existing.id }, data: { revokedAt: new Date() } });
+        return reply.error(401, "Token expired");
+      }
+
+      // Rotate
+      const ttl = parseDuration(process.env.JWT_REFRESH_TOKEN_EXPIRES_IN, 7 * 24 * 3600 * 1000);
+      const expiresAt = new Date(Date.now() + ttl);
+      const { randomBytes } = await import('node:crypto');
+      const raw = randomBytes(32).toString('hex');
+      const newHash = createHash('sha256').update(raw).digest('hex');
+
+      const updated = await app.prisma.$transaction(async (tx) => {
+        const created = await tx.refreshToken.create({ data: { userId: existing.userId, tokenHash: newHash, expiresAt } });
+        await tx.refreshToken.update({ where: { id: existing.id }, data: { revokedAt: new Date(), replacedById: created.id } });
+        return created;
+      });
+
+      const user = existing.user;
+      const roles = user?.roles?.map((r) => r.role.name) || [];
+      const accessToken = app.jwt.sign({ userId: user.id, username: user.username, roles });
+      return { accessToken, refreshToken: raw };
     }
   );
 }

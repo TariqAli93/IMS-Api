@@ -1,6 +1,9 @@
 // src/modules/products/routes.js
 export default async function routes(app) {
-  const auth = { preHandler: [app.verifyJwt] };
+  const canRead = { preHandler: [app.verifyJwt, app.authorize("products", "read")] };
+  const canCreate = { preHandler: [app.verifyJwt, app.authorize("products", "create")] };
+  const canUpdate = { preHandler: [app.verifyJwt, app.authorize("products", "update")] };
+  const canDelete = { preHandler: [app.verifyJwt, app.authorize("products", "delete")] };
   const schema = {
     tags: ["products"]
   };
@@ -15,7 +18,7 @@ export default async function routes(app) {
   app.get(
     "/products",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         querystring: {
@@ -70,13 +73,13 @@ export default async function routes(app) {
   app.get(
     "/products/:id",
     {
-      ...auth,
+      ...canRead,
       schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } }
     },
     async (req, reply) => {
       const id = toInt(req.params.id);
       const product = await app.prisma.product.findUnique({ where: { id } });
-      if (!product) return reply.code(404).send({ message: "Product not found" });
+      if (!product) return reply.error(404, "Product not found");
       return product;
     }
   );
@@ -85,7 +88,7 @@ export default async function routes(app) {
   app.post(
     "/products",
     {
-      ...auth,
+      ...canCreate,
       schema: {
         ...schema,
         body: {
@@ -111,7 +114,7 @@ export default async function routes(app) {
   app.patch(
     "/products/:id",
     {
-      ...auth,
+      ...canUpdate,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] },
@@ -132,7 +135,7 @@ export default async function routes(app) {
       try {
         return await app.prisma.product.update({ where: { id }, data: req.body });
       } catch (e) {
-        return reply.code(404).send({ message: "Product not found" });
+        return reply.error(404, "Product not found");
       }
     }
   );
@@ -142,7 +145,7 @@ export default async function routes(app) {
   app.delete(
     "/products/:id",
     {
-      ...auth,
+      ...canDelete,
       schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } }
     },
     async (req, reply) => {
@@ -151,9 +154,9 @@ export default async function routes(app) {
         where: { id },
         include: { _count: { select: { items: true } } }
       });
-      if (!product) return reply.code(404).send({ message: "Product not found" });
+      if (!product) return reply.error(404, "Product not found");
       if (product._count.items > 0) {
-        return reply.code(409).send({ message: "Cannot delete product linked to contracts" });
+        return reply.error(409, "Cannot delete product linked to contracts");
       }
       await app.prisma.product.delete({ where: { id } });
       return { ok: true };

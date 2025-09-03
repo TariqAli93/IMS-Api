@@ -1,6 +1,9 @@
 // src/modules/customers/routes.js
 export default async function routes(app) {
-  const auth = { preHandler: [app.verifyJwt] };
+  const canRead = { preHandler: [app.verifyJwt, app.authorize("customers", "read")] };
+  const canCreate = { preHandler: [app.verifyJwt, app.authorize("customers", "create")] };
+  const canUpdate = { preHandler: [app.verifyJwt, app.authorize("customers", "update")] };
+  const canDelete = { preHandler: [app.verifyJwt, app.authorize("customers", "delete")] };
   const schema = {
     tags: ["customers"]
   };
@@ -15,7 +18,7 @@ export default async function routes(app) {
   app.get(
     "/customers",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         querystring: {
@@ -69,7 +72,7 @@ export default async function routes(app) {
   app.get(
     "/customers/:id",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] }
@@ -83,7 +86,7 @@ export default async function routes(app) {
           _count: { select: { contracts: true, documents: true } }
         }
       });
-      if (!customer) return reply.code(404).send({ message: "Customer not found" });
+      if (!customer) return reply.error(404, "Customer not found");
       return customer;
     }
   );
@@ -92,7 +95,7 @@ export default async function routes(app) {
   app.post(
     "/customers",
     {
-      ...auth,
+      ...canCreate,
       schema: {
         ...schema,
         body: {
@@ -117,7 +120,7 @@ export default async function routes(app) {
   app.patch(
     "/customers/:id",
     {
-      ...auth,
+      ...canUpdate,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] },
@@ -141,7 +144,7 @@ export default async function routes(app) {
         return updated;
       } catch (e) {
         // لو id غير موجود
-        return reply.code(404).send({ message: "Customer not found" });
+        return reply.error(404, "Customer not found");
       }
     }
   );
@@ -151,7 +154,7 @@ export default async function routes(app) {
   app.delete(
     "/customers/:id",
     {
-      ...auth,
+      ...canDelete,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] }
@@ -163,14 +166,11 @@ export default async function routes(app) {
         where: { id },
         include: { _count: { select: { contracts: true, documents: true } } }
       });
-      if (!customer) return reply.code(404).send({ message: "Customer not found" });
+      if (!customer) return reply.error(404, "Customer not found");
 
       const hasRefs = customer._count.contracts > 0 || customer._count.documents > 0;
       if (hasRefs) {
-        return reply.code(409).send({
-          message: "Cannot delete customer with existing contracts/documents",
-          counts: customer._count
-        });
+        return reply.error(409, "Cannot delete customer with existing contracts/documents", { counts: customer._count });
       }
 
       await app.prisma.customer.delete({ where: { id } });
@@ -182,7 +182,7 @@ export default async function routes(app) {
   app.get(
     "/customers/:id/contracts",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] },
@@ -198,7 +198,7 @@ export default async function routes(app) {
       const id = toInt(req.params.id);
       const { status } = req.query;
       const customer = await app.prisma.customer.findUnique({ where: { id } });
-      if (!customer) return reply.code(404).send({ message: "Customer not found" });
+      if (!customer) return reply.error(404, "Customer not found");
 
       const contracts = await app.prisma.contract.findMany({
         where: { customerId: id, ...(status ? { status } : {}) },
@@ -215,7 +215,7 @@ export default async function routes(app) {
   app.get(
     "/customers/:id/documents",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] }
@@ -224,7 +224,7 @@ export default async function routes(app) {
     async (req, reply) => {
       const id = toInt(req.params.id);
       const exists = await app.prisma.customer.findUnique({ where: { id }, select: { id: true } });
-      if (!exists) return reply.code(404).send({ message: "Customer not found" });
+      if (!exists) return reply.error(404, "Customer not found");
 
       const docs = await app.prisma.document.findMany({
         where: { customerId: id },

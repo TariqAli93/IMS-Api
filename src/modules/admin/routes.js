@@ -1,16 +1,16 @@
 import { runDueInstallmentsScan, runLowStockScan } from "../../jobs/notifications.js";
 export default async function routes(app) {
+  const adminGuard = [app.verifyJwt, app.authorize("*", "*")];
   app.post(
     "/run-notifications",
     {
-      preHandler: [app.verifyJwt, app.authorize("product", "read")],
+      preHandler: adminGuard,
       schema: {
         tags: ["admin"]
       }
     },
     async (req, rep) => {
       try {
-        console.log(req.user);
         const results = {};
         results.due = await runDueInstallmentsScan(app);
         results.stock = await runLowStockScan(app);

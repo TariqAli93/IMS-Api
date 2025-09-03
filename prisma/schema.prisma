@@ -34,11 +34,12 @@ enum DocType {
 }
 
 model User {
-  id        Int        @id @default(autoincrement())
-  username  String     @unique
-  password  String
-  createdAt DateTime   @default(now())
-  roles     UserRole[]
+  id           Int            @id @default(autoincrement())
+  username     String         @unique
+  password     String
+  createdAt    DateTime       @default(now())
+  roles        UserRole[]
+  RefreshToken RefreshToken[]
 }
 
 model Role {
@@ -159,4 +160,18 @@ model NotificationLog {
   type      String
   payload   String
   createdAt DateTime @default(now())
+}
+
+model RefreshToken {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id])
+  tokenHash    String
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+  replacedById Int?
+
+  @@index([userId])
+  @@index([tokenHash])
 }

@@ -16,6 +16,23 @@ export default fp(async (app) => {
             scheme: "bearer",
             bearerFormat: "JWT"
           }
+        },
+        schemas: {
+          Error: {
+            type: "object",
+            properties: {
+              code: { type: "integer", example: 400 },
+              message: { type: "string", example: "Validation error" },
+              details: { type: "object", nullable: true }
+            }
+          },
+          AuthTokens: {
+            type: "object",
+            properties: {
+              accessToken: { type: "string" },
+              refreshToken: { type: "string" }
+            }
+          }
         }
       },
       security: [

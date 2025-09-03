@@ -7,7 +7,10 @@ import crypto from "node:crypto";
 import { pipeline } from "node:stream/promises";
 
 export default async function routes(app) {
-  const auth = { preHandler: [app.verifyJwt] };
+  const canRead = { preHandler: [app.verifyJwt, app.authorize("documents", "read")] };
+  const canCreate = { preHandler: [app.verifyJwt, app.authorize("documents", "create")] };
+  const canUpdate = { preHandler: [app.verifyJwt, app.authorize("documents", "update")] };
+  const canDelete = { preHandler: [app.verifyJwt, app.authorize("documents", "delete")] };
   const schema = {
     tags: ["documents"]
   };
@@ -41,7 +44,7 @@ export default async function routes(app) {
   app.get(
     "/documents",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         querystring: {
@@ -92,13 +95,13 @@ export default async function routes(app) {
   );
 
   // ---------- GET /documents/:id ----------
-  app.get("/documents/:id", { ...auth, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.get("/documents/:id", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const doc = await app.prisma.document.findUnique({
       where: { id },
       include: { customer: { select: { id: true, name: true, phone: true } } }
     });
-    if (!doc) return reply.code(404).send({ message: "Document not found" });
+    if (!doc) return reply.error(404, "Document not found");
     return doc;
   });
 
@@ -107,7 +110,7 @@ export default async function routes(app) {
   app.post(
     "/documents",
     {
-      ...auth,
+      ...canCreate,
       schema: {
         ...schema,
         body: {
@@ -129,14 +132,14 @@ export default async function routes(app) {
     async (req, reply) => {
       const { customerId } = req.body;
       const exists = await app.prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
-      if (!exists) return reply.code(400).send({ message: "Invalid customerId" });
+      if (!exists) return reply.error(400, "Invalid customerId");
 
       // منع تكرار نفس الاسم لنفس العميل
       const dupe = await app.prisma.document.findFirst({
         where: { customerId, fileName: req.body.fileName },
         select: { id: true }
       });
-      if (dupe) return reply.code(409).send({ message: "File with same name already exists for this customer" });
+      if (dupe) return reply.error(409, "File with same name already exists for this customer");
 
       const doc = await app.prisma.document.create({ data: req.body });
       return doc;
@@ -148,7 +151,7 @@ export default async function routes(app) {
   app.post(
     "/documents/upload",
     {
-      ...auth,
+      ...canCreate,
       config: {
         // حدود عامة
         bodyLimit: MAX_FILE_BYTES + 1024 * 1024
@@ -169,20 +172,20 @@ export default async function routes(app) {
     },
     async (req, reply) => {
       if (!req.isMultipart) {
-        return reply.code(400).send({ message: "Content-Type must be multipart/form-data" });
+        return reply.error(400, "Content-Type must be multipart/form-data");
       }
       // تأكد أنك مسجل @fastify/multipart في السيرفر:
       // await app.register(import("@fastify/multipart"));
       const mp = await req.file({ limits: { fileSize: MAX_FILE_BYTES } }); // ملف واحد
-      if (!mp) return reply.code(400).send({ message: "file field is required" });
+      if (!mp) return reply.error(400, "file field is required");
 
       const { customerId: customerIdRaw, type } = mp.fields;
       const customerId = toInt(customerIdRaw?.value ?? customerIdRaw, NaN);
-      if (!Number.isFinite(customerId)) return reply.code(400).send({ message: "Invalid customerId" });
-      if (!Object.values(DocType).includes(type?.value ?? type)) return reply.code(400).send({ message: "Invalid type" });
+      if (!Number.isFinite(customerId)) return reply.error(400, "Invalid customerId");
+      if (!Object.values(DocType).includes(type?.value ?? type)) return reply.error(400, "Invalid type");
 
       const customer = await app.prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
-      if (!customer) return reply.code(400).send({ message: "Invalid customerId" });
+      if (!customer) return reply.error(400, "Invalid customerId");
 
       const original = safeName(mp.filename || "upload.bin");
       const dir = path.join(UPLOAD_ROOT, String(customerId));
@@ -193,7 +196,7 @@ export default async function routes(app) {
       // منع الكتابة فوق ملف موجود بنفس الاسم لنفس العميل
       try {
         await fsp.access(targetPath, fs.constants.F_OK);
-        return reply.code(409).send({ message: "File already exists" });
+        return reply.error(409, "File already exists");
       } catch {
         // ok, not exists
       }
@@ -204,7 +207,7 @@ export default async function routes(app) {
       const stats = await fsp.stat(tmpPath);
       if (stats.size > MAX_FILE_BYTES) {
         await fsp.unlink(tmpPath).catch(() => {});
-        return reply.code(413).send({ message: "File too large" });
+        return reply.error(413, "File too large");
       }
 
       // احسب checksum ثم انقل الملف
@@ -231,7 +234,7 @@ export default async function routes(app) {
   app.patch(
     "/documents/:id",
     {
-      ...auth,
+      ...canUpdate,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] },
@@ -250,7 +253,7 @@ export default async function routes(app) {
     async (req, reply) => {
       const id = toInt(req.params.id);
       const doc = await app.prisma.document.findUnique({ where: { id } });
-      if (!doc) return reply.code(404).send({ message: "Document not found" });
+      if (!doc) return reply.error(404, "Document not found");
 
       // منع تكرار اسم الملف لنفس العميل
       if (req.body?.fileName && req.body.fileName !== doc.fileName) {
@@ -258,7 +261,7 @@ export default async function routes(app) {
           where: { customerId: doc.customerId, fileName: req.body.fileName },
           select: { id: true }
         });
-        if (dupe) return reply.code(409).send({ message: "File with same name already exists for this customer" });
+        if (dupe) return reply.error(409, "File with same name already exists for this customer");
       }
 
       const updated = await app.prisma.document.update({ where: { id }, data: req.body });
@@ -267,16 +270,16 @@ export default async function routes(app) {
   );
 
   // ---------- GET /documents/:id/download ----------
-  app.get("/documents/:id/download", { ...auth, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.get("/documents/:id/download", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const doc = await app.prisma.document.findUnique({ where: { id } });
-    if (!doc) return reply.code(404).send({ message: "Document not found" });
+    if (!doc) return reply.error(404, "Document not found");
 
     const absPath = path.resolve(doc.path);
     try {
       await fsp.access(absPath, fs.constants.R_OK);
     } catch {
-      return reply.code(404).send({ message: "File not found on disk" });
+      return reply.error(404, "File not found on disk");
     }
 
     reply.header("Content-Type", doc.mimeType);
@@ -289,7 +292,7 @@ export default async function routes(app) {
   app.delete(
     "/documents/:id",
     {
-      ...auth,
+      ...canDelete,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] },
@@ -303,7 +306,7 @@ export default async function routes(app) {
       const id = toInt(req.params.id);
       const { deleteFile } = req.query;
       const doc = await app.prisma.document.findUnique({ where: { id } });
-      if (!doc) return reply.code(404).send({ message: "Document not found" });
+      if (!doc) return reply.error(404, "Document not found");
 
       await app.prisma.document.delete({ where: { id } });
 

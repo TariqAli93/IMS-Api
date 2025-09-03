@@ -13,6 +13,7 @@ import multipart from "../src/plugins/multipart.js";
 import serveStatic from "../src/plugins/static.js";
 import bcrypt from "../src/plugins/bcrypt.js";
 import configLogger from "../src/plugins/config-logger.js";
+import errorHandler from "../src/plugins/error-handler.js";
 import rbacPlugin from "../src/rbac/index.js";
 import adminRbacRoutes from "../src/rbac/admin-rbac.js";
 
@@ -44,6 +45,7 @@ await app.register(jwt);
 await app.register(serveStatic);
 await app.register(bcrypt);
 await app.register(configLogger);
+await app.register(errorHandler);
 await app.register(import("../src/plugins/scheduler.js"), { enabled: true });
 
 await app.register(rbacPlugin, {

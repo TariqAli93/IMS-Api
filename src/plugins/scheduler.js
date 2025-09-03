@@ -6,25 +6,30 @@ const TZ = "Asia/Baghdad";
 async function markOverdueAndRecalc(app) {
   const now = new Date();
 
-  // 1) هات الأقساط المتأخرة وغير المسددة بالكامل (paidCents < amountCents)
-  //    نستخدم RAW لأن Prisma ما يدعم مقارنة عمود بعمود بالـ where.
-  const overdueRows = await app.prisma.$queryRawUnsafe(
-    `
-    SELECT id, contractId
-    FROM Installment
-    WHERE dueDate < ? AND paidCents < amountCents AND status <> 'PAID'
-    `,
-    now
-  );
+  // نفّذ القراءة والتحديث داخل ترانزاكشن واحدة وباستعلامات مُعلّمة لتجنّب SQL injection
+  const { instIds, affectedContracts } = await app.prisma.$transaction(async (tx) => {
+    // 1) هات الأقساط المتأخرة وغير المسددة بالكامل (paidCents < amountCents)
+    // استخدم $queryRaw المعلّم بدل $queryRawUnsafe
+    const overdueRows = await tx.$queryRaw`
+      SELECT id, contractId
+      FROM Installment
+      WHERE dueDate < ${now} AND paidCents < amountCents AND status <> ${"PAID"}
+    `;
 
-  const instIds = overdueRows.map((r) => Number(r.id));
-  const affectedContracts = [...new Set(overdueRows.map((r) => Number(r.contractId)))];
+    const instIdsLocal = overdueRows.map((r) => Number(r.id));
+    const affectedContractsLocal = [...new Set(overdueRows.map((r) => Number(r.contractId)))];
 
-  // 2) حدّث حالة الأقساط إلى LATE (للّي مو PAID)
-  if (instIds.length) {
-    // نعملها فرديًا حتى ما نكسّر حدود Prisma (updateMany ما يفلتر paidCents<amountCents)
-    await app.prisma.$transaction(instIds.map((id) => app.prisma.installment.update({ where: { id }, data: { status: "LATE" } })));
-  }
+    // 2) حدّث حالة الأقساط إلى LATE (للّي مو PAID)
+    if (instIdsLocal.length) {
+      // استخدم updateMany على مجموعة المعرفات مع شرط status <> 'PAID' كحماية إضافية ضد السباق
+      await tx.installment.updateMany({
+        where: { id: { in: instIdsLocal }, status: { not: "PAID" } },
+        data: { status: "LATE" }
+      });
+    }
+
+    return { instIds: instIdsLocal, affectedContracts: affectedContractsLocal };
+  });
 
   // 3) أعد حساب حالة العقود المتأثرة
   await recalcContracts(app, affectedContracts);
@@ -308,10 +313,10 @@ export default fp(async function schedulerPlugin(app, opts) {
           await lowStockAlert(app);
           return { ok: true, ran: "lowStock" };
         }
-        return reply.code(400).send({ message: "Unknown job" });
+        return reply.error(400, "Unknown job");
       } catch (e) {
         app.log.error(e);
-        return reply.code(500).send({ message: "Job failed" });
+        return reply.error(500, "Job failed");
       }
     }
   );

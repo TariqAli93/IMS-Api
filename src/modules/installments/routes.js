@@ -1,7 +1,9 @@
 // src/modules/installments/routes.js
 export default async function routes(app) {
   // لو عندك JWT:
-  const auth = { preHandler: [app.verifyJwt] };
+  const canRead = { preHandler: [app.verifyJwt, app.authorize("installments", "read")] };
+  const canUpdate = { preHandler: [app.verifyJwt, app.authorize("installments", "update")] };
+  const canCreatePay = { preHandler: [app.verifyJwt, app.authorize("payments", "create")] };
   const schema = {
     tags: ["installments"]
   };
@@ -38,7 +40,7 @@ export default async function routes(app) {
   app.get(
     "/installments",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         querystring: {
@@ -119,7 +121,7 @@ export default async function routes(app) {
   app.get(
     "/installments/:id",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] }
@@ -136,7 +138,7 @@ export default async function routes(app) {
           payments: { orderBy: { paidAt: "desc" } }
         }
       });
-      if (!inst) return reply.code(404).send({ message: "Installment not found" });
+      if (!inst) return reply.error(404, "Installment not found");
       return inst;
     }
   );
@@ -145,7 +147,7 @@ export default async function routes(app) {
   app.get(
     "/installments/:id/payments",
     {
-      ...auth,
+      ...canUpdate,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] }
@@ -154,7 +156,7 @@ export default async function routes(app) {
     async (req, reply) => {
       const id = Number(req.params.id);
       const inst = await app.prisma.installment.findUnique({ where: { id } });
-      if (!inst) return reply.code(404).send({ message: "Installment not found" });
+      if (!inst) return reply.error(404, "Installment not found");
 
       const payments = await app.prisma.payment.findMany({
         where: { installmentId: id },
@@ -168,7 +170,7 @@ export default async function routes(app) {
   app.patch(
     "/installments/:id",
     {
-      ...auth,
+      ...canCreatePay,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] },
@@ -188,13 +190,13 @@ export default async function routes(app) {
       const { dueDate, amountCents, status } = req.body || {};
 
       const inst = await app.prisma.installment.findUnique({ where: { id } });
-      if (!inst) return reply.code(404).send({ message: "Installment not found" });
+      if (!inst) return reply.error(404, "Installment not found");
 
       const data = {};
       if (dueDate) data.dueDate = new Date(dueDate);
       if (Number.isFinite(amountCents)) {
         if (amountCents < inst.paidCents) {
-          return reply.code(400).send({ message: "amountCents cannot be less than paidCents" });
+          return reply.error(400, "amountCents cannot be less than paidCents");
         }
         data.amountCents = amountCents;
       }
@@ -223,7 +225,7 @@ export default async function routes(app) {
   app.post(
     "/installments/:id/pay",
     {
-      ...auth,
+      ...canUpdate,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] },
@@ -247,8 +249,7 @@ export default async function routes(app) {
       return app.prisma.$transaction(async (tx) => {
         const inst = await tx.installment.findUnique({ where: { id } });
         if (!inst) {
-          reply.code(404);
-          return { message: "Installment not found" };
+          return reply.error(404, "Installment not found");
         }
 
         const remaining = Math.max(inst.amountCents - inst.paidCents, 0);
@@ -300,7 +301,7 @@ export default async function routes(app) {
   app.post(
     "/contracts/:id/recalc",
     {
-      ...auth,
+      ...canUpdate,
       schema: {
         ...schema,
         params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] }
@@ -309,7 +310,7 @@ export default async function routes(app) {
     async (req, reply) => {
       const contractId = Number(req.params.id);
       const contract = await app.prisma.contract.findUnique({ where: { id: contractId } });
-      if (!contract) return reply.code(404).send({ message: "Contract not found" });
+      if (!contract) return reply.error(404, "Contract not found");
 
       await app.prisma.$transaction(async (tx) => {
         const insts = await tx.installment.findMany({ where: { contractId } });

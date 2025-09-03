@@ -5,13 +5,13 @@ import winston from "winston";
 import { format } from "date-fns-tz";
 
 const ConfigSchema = object({
-  NODE_ENV: string().nonempty(),
-  TZ: string().nonempty(),
+  NODE_ENV: string().min(1),
+  TZ: string().min(1),
   PORT: number(),
-  DATABASE_URL: string().url().nonempty(),
-  JWT_SECRET: string().nonempty(),
-  JWT_ACCESS_TOKEN_EXPIRES_IN: string().nonempty(),
-  JWT_REFRESH_TOKEN_EXPIRES_IN: string().nonempty()
+  DATABASE_URL: string().url().min(1),
+  JWT_SECRET: string().min(1),
+  JWT_ACCESS_TOKEN_EXPIRES_IN: string().min(1),
+  JWT_REFRESH_TOKEN_EXPIRES_IN: string().min(1)
 });
 
 const envVariables = {

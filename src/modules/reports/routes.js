@@ -1,6 +1,6 @@
 // src/modules/reports/routes.js
 export default async function routes(app) {
-  const auth = { preHandler: [app.verifyJwt] };
+  const canRead = { preHandler: [app.verifyJwt, app.authorize("reports", "read")] };
   const schema = {
     tags: ["reports"]
   };
@@ -20,7 +20,7 @@ export default async function routes(app) {
   app.get(
     "/reports/summary",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         querystring: {
@@ -115,7 +115,7 @@ export default async function routes(app) {
 
   // ---------- GET /reports/aging ----------
   // أعمار الذمم بناءً على فرق الأيام (اليوم - dueDate) للأقساط غير المسددة بالكامل
-  app.get("/reports/aging", { ...auth, schema: { tags: ["reports"] } }, async () => {
+  app.get("/reports/aging", { ...canRead, schema: { tags: ["reports"] } }, async () => {
     const items = await app.prisma.installment.findMany({
       where: {},
       select: { dueDate: true, amountCents: true, paidCents: true },
@@ -153,7 +153,7 @@ export default async function routes(app) {
   app.get(
     "/reports/payments/timeseries",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         querystring: {
@@ -203,7 +203,7 @@ export default async function routes(app) {
 
   // ---------- GET /reports/inventory/low-stock ----------
   // المنتجات التي مخزونها <= العتبة
-  app.get("/reports/inventory/low-stock", { ...auth, schema: { ...schema } }, async () => {
+  app.get("/reports/inventory/low-stock", { ...canRead, schema: { ...schema } }, async () => {
     const items = await app.prisma.product.findMany();
     const low = items.filter((p) => p.stock <= p.stockThreshold);
     return { count: low.length, items: low };
@@ -214,7 +214,7 @@ export default async function routes(app) {
   app.get(
     "/reports/customers/top",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         querystring: {
@@ -260,7 +260,7 @@ export default async function routes(app) {
   );
 
   // ---------- GET /reports/contracts/status ----------
-  app.get("/reports/contracts/status", { ...auth, schema: { ...schema } }, async () => {
+  app.get("/reports/contracts/status", { ...canRead, schema: { ...schema } }, async () => {
     const rows = await app.prisma.contract.groupBy({
       by: ["status"],
       _count: { status: true }

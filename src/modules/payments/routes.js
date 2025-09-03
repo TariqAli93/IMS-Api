@@ -2,7 +2,9 @@
 import { InstallmentStatus, ContractStatus } from "@prisma/client";
 
 export default async function routes(app) {
-  const auth = { preHandler: [app.verifyJwt] };
+  const canRead = { preHandler: [app.verifyJwt, app.authorize("payments", "read")] };
+  const canCreate = { preHandler: [app.verifyJwt, app.authorize("payments", "create")] };
+  const canDelete = { preHandler: [app.verifyJwt, app.authorize("payments", "delete")] };
   const schema = {
     tags: ["payments"]
   };
@@ -42,7 +44,7 @@ export default async function routes(app) {
   app.get(
     "/payments",
     {
-      ...auth,
+      ...canRead,
       schema: {
         ...schema,
         querystring: {
@@ -91,7 +93,7 @@ export default async function routes(app) {
   );
 
   // ---------- GET /payments/:id ----------
-  app.get("/payments/:id", { ...auth, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.get("/payments/:id", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const payment = await app.prisma.payment.findUnique({
       where: { id },
@@ -105,7 +107,7 @@ export default async function routes(app) {
         }
       }
     });
-    if (!payment) return reply.code(404).send({ message: "Payment not found" });
+    if (!payment) return reply.error(404, "Payment not found");
     return payment;
   });
 
@@ -113,7 +115,7 @@ export default async function routes(app) {
   app.post(
     "/payments",
     {
-      ...auth,
+      ...canCreate,
       schema: {
         ...schema,
         body: {
@@ -133,11 +135,11 @@ export default async function routes(app) {
 
       return app.prisma.$transaction(async (tx) => {
         const inst = await tx.installment.findUnique({ where: { id: installmentId } });
-        if (!inst) return reply.code(404).send({ message: "Installment not found" });
+        if (!inst) return reply.error(404, "Installment not found");
 
         const remaining = Math.max(inst.amountCents - inst.paidCents, 0);
         if (remaining === 0) {
-          return reply.code(400).send({ message: "Installment already fully paid" });
+          return reply.error(400, "Installment already fully paid");
         }
 
         const apply = Math.min(amountCents, remaining);
@@ -159,11 +161,11 @@ export default async function routes(app) {
   );
 
   // ---------- DELETE /payments/:id ----------
-  app.delete("/payments/:id", { ...auth, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.delete("/payments/:id", { ...canDelete, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     return app.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUnique({ where: { id } });
-      if (!payment) return reply.code(404).send({ message: "Payment not found" });
+      if (!payment) return reply.error(404, "Payment not found");
 
       // رجّع المبلغ إلى القسط
       await tx.installment.update({

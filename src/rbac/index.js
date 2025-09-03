@@ -82,7 +82,6 @@ export default fp(
     fastify.decorate("reloadRBAC", async () => {
       grants = await loadGrants(prisma);
       rbac = makeRbac({ grants, superRoles });
-      fastify.log.info("RBAC reloaded");
     });
 
     /**

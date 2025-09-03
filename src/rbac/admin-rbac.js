@@ -78,6 +78,7 @@ export default async function adminRbacRoutes(app) {
     async (req, rep) => {
       const name = String(req.body.name).trim().toUpperCase();
       const role = await prisma.role.upsert({ where: { name }, update: {}, create: { name } });
+      await app.reloadRBAC();
       return role;
     }
   );
@@ -99,6 +100,7 @@ export default async function adminRbacRoutes(app) {
     async (req) => {
       const { resource, action } = req.body;
       const perm = await getOrCreatePermission(resource, action);
+      await app.reloadRBAC();
       return perm;
     }
   );
@@ -133,6 +135,7 @@ export default async function adminRbacRoutes(app) {
         create: { roleId: role.id, permId: perm.id }
       });
 
+      await app.reloadRBAC();
       return { ok: true };
     }
   );
@@ -164,6 +167,7 @@ export default async function adminRbacRoutes(app) {
       if (!perm) return { ok: true }; // nothing to delete
 
       await prisma.rolePermission.deleteMany({ where: { roleId: role.id, permId: perm.id } });
+      await app.reloadRBAC();
       return { ok: true };
     }
   );
