@@ -42,7 +42,7 @@ export default async function routes(app) {
   // ---------- GET /documents ----------
   // ?page=1&pageSize=20&q=id.pdf&type=ID&customerId=1&sort=uploadedAt:desc
   app.get(
-    "/documents",
+    "/",
     {
       ...canRead,
       schema: {
@@ -95,7 +95,7 @@ export default async function routes(app) {
   );
 
   // ---------- GET /documents/:id ----------
-  app.get("/documents/:id", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.get("/:id", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const doc = await app.prisma.document.findUnique({
       where: { id },
@@ -108,7 +108,7 @@ export default async function routes(app) {
   // ---------- POST /documents (metadata only) ----------
   // استخدمها إذا عندك رفع خارجي وتريد بس تسجّل ميتاداتا
   app.post(
-    "/documents",
+    "/",
     {
       ...canCreate,
       schema: {
@@ -149,7 +149,7 @@ export default async function routes(app) {
   // ---------- POST /documents/upload (multipart) ----------
   // fields: customerId (int), type (DocType), file (binary)
   app.post(
-    "/documents/upload",
+    "/upload",
     {
       ...canCreate,
       config: {
@@ -232,7 +232,7 @@ export default async function routes(app) {
 
   // ---------- PATCH /documents/:id ----------
   app.patch(
-    "/documents/:id",
+    "/:id",
     {
       ...canUpdate,
       schema: {
@@ -270,7 +270,7 @@ export default async function routes(app) {
   );
 
   // ---------- GET /documents/:id/download ----------
-  app.get("/documents/:id/download", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.get("/:id/download", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const doc = await app.prisma.document.findUnique({ where: { id } });
     if (!doc) return reply.error(404, "Document not found");
@@ -290,7 +290,7 @@ export default async function routes(app) {
   // ---------- DELETE /documents/:id ----------
   // ?deleteFile=true لحذف الملف من القرص أيضاً
   app.delete(
-    "/documents/:id",
+    "/:id",
     {
       ...canDelete,
       schema: {

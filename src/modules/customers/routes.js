@@ -16,7 +16,7 @@ export default async function routes(app) {
   // ---------- GET /customers ----------
   // ?page=1&pageSize=20&q=ali&sort=name:asc|createdAt:desc
   app.get(
-    "/customers",
+    "/",
     {
       ...canRead,
       schema: {
@@ -70,7 +70,7 @@ export default async function routes(app) {
 
   // ---------- GET /customers/:id ----------
   app.get(
-    "/customers/:id",
+    "/:id",
     {
       ...canRead,
       schema: {
@@ -93,7 +93,7 @@ export default async function routes(app) {
 
   // ---------- POST /customers ----------
   app.post(
-    "/customers",
+    "/",
     {
       ...canCreate,
       schema: {
@@ -118,7 +118,7 @@ export default async function routes(app) {
 
   // ---------- PATCH /customers/:id ----------
   app.patch(
-    "/customers/:id",
+    "/:id",
     {
       ...canUpdate,
       schema: {
@@ -152,7 +152,7 @@ export default async function routes(app) {
   // ---------- DELETE /customers/:id ----------
   // حماية: لا تحذف إذا عنده عقود أو مستندات
   app.delete(
-    "/customers/:id",
+    "/:id",
     {
       ...canDelete,
       schema: {
@@ -180,7 +180,7 @@ export default async function routes(app) {
 
   // ---------- GET /customers/:id/contracts ----------
   app.get(
-    "/customers/:id/contracts",
+    "/:id/contracts",
     {
       ...canRead,
       schema: {
@@ -213,7 +213,7 @@ export default async function routes(app) {
 
   // ---------- GET /customers/:id/documents ----------
   app.get(
-    "/customers/:id/documents",
+    "/:id/documents",
     {
       ...canRead,
       schema: {

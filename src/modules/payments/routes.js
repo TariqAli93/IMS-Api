@@ -42,7 +42,7 @@ export default async function routes(app) {
 
   // ---------- GET /payments ----------
   app.get(
-    "/payments",
+    "/",
     {
       ...canRead,
       schema: {
@@ -93,7 +93,7 @@ export default async function routes(app) {
   );
 
   // ---------- GET /payments/:id ----------
-  app.get("/payments/:id", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.get("/:id", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const payment = await app.prisma.payment.findUnique({
       where: { id },
@@ -113,7 +113,7 @@ export default async function routes(app) {
 
   // ---------- POST /payments ----------
   app.post(
-    "/payments",
+    "/",
     {
       ...canCreate,
       schema: {
@@ -161,7 +161,7 @@ export default async function routes(app) {
   );
 
   // ---------- DELETE /payments/:id ----------
-  app.delete("/payments/:id", { ...canDelete, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.delete("/:id", { ...canDelete, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     return app.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUnique({ where: { id } });

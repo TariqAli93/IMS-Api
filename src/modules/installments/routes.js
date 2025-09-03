@@ -38,7 +38,7 @@ export default async function routes(app) {
 
   // ---------- GET /installments ----------
   app.get(
-    "/installments",
+    "/",
     {
       ...canRead,
       schema: {
@@ -119,7 +119,7 @@ export default async function routes(app) {
 
   // ---------- GET /installments/:id ----------
   app.get(
-    "/installments/:id",
+    "/:id",
     {
       ...canRead,
       schema: {
@@ -145,7 +145,7 @@ export default async function routes(app) {
 
   // ---------- GET /installments/:id/payments ----------
   app.get(
-    "/installments/:id/payments",
+    "/:id/payments",
     {
       ...canUpdate,
       schema: {
@@ -168,7 +168,7 @@ export default async function routes(app) {
 
   // ---------- PATCH /installments/:id ----------
   app.patch(
-    "/installments/:id",
+    "/:id",
     {
       ...canCreatePay,
       schema: {
@@ -223,7 +223,7 @@ export default async function routes(app) {
 
   // ---------- POST /installments/:id/pay ----------
   app.post(
-    "/installments/:id/pay",
+    "/:id/pay",
     {
       ...canUpdate,
       schema: {

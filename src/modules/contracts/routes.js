@@ -33,7 +33,7 @@ export default async function routes(app) {
 
   // ---------- GET /contracts ----------
   app.get(
-    "/contracts",
+    "/",
     {
       ...canRead,
       schema: {
@@ -77,7 +77,7 @@ export default async function routes(app) {
   );
 
   // ---------- GET /contracts/:id ----------
-  app.get("/contracts/:id", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.get("/:id", { ...canRead, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const contract = await app.prisma.contract.findUnique({
       where: { id },
@@ -93,7 +93,7 @@ export default async function routes(app) {
 
   // ---------- POST /contracts ----------
   app.post(
-    "/contracts",
+    "/",
     {
       ...canCreate,
       schema: {
@@ -166,7 +166,7 @@ export default async function routes(app) {
 
   // ---------- PATCH /contracts/:id/status ----------
   app.patch(
-    "/contracts/:id/status",
+    "/:id/status",
     {
       ...canUpdate,
       schema: {
@@ -186,7 +186,7 @@ export default async function routes(app) {
   );
 
   // ---------- POST /contracts/:id/recalc ----------
-  app.post("/contracts/:id/recalc", { ...canUpdate, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.post("/:id/recalc", { ...canUpdate, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const contract = await app.prisma.contract.findUnique({ where: { id } });
     if (!contract) return reply.error(404, "Contract not found");
@@ -208,7 +208,7 @@ export default async function routes(app) {
   });
 
   // ---------- DELETE /contracts/:id ----------
-  app.delete("/contracts/:id", { ...canDelete, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
+  app.delete("/:id", { ...canDelete, schema: { ...schema, params: { type: "object", properties: { id: { type: "integer" } }, required: ["id"] } } }, async (req, reply) => {
     const id = toInt(req.params.id);
     const contract = await app.prisma.contract.findUnique({
       where: { id },
